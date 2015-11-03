@@ -4,79 +4,143 @@
 #include <math.h>
 #include "hmm.h"
 #define Seq_len 50
+#define Sample_count 10000
 
-double veteribi_log[6][50] = {0.};
+HMM* hmm;  
+double _alpha[MAX_SEQ][MAX_STATE];
+double _beta[MAX_SEQ][MAX_STATE];
+double _gamma[MAX_SEQ][MAX_STATE];
+double _epslion[MAX_SEQ][MAX_STATE][MAX_STATE];
+double acc_epslion[MAX_STATE][MAX_STATE];
+double acc_gamma[MAX_SEQ][MAX_STATE];
+double stat_gamma[MAX_STATE];
+double stat2_gamma[MAX_STATE];
+double ob_gamma[MAX_OBSERV][MAX_STATE];
 
 void load_observation(FILE* fptr,char* observation)
 {	 
 	 fscanf(fptr, "%s", observation);
 }
+void DumpModel(FILE* fptr)
+{
+	dumpHMM(fptr, hmm);
+}
 int ob2index(char ob)
 {
 	 return ob-65;
 }
-void forward(HMM* hmm, char* observation)
+void forward(char* observation)
 {
-	 int i=0, j=0, k=0, m=0;
-	 double max_prop = 0., prop = 0.;
-	 for(i=0 ; i<hmm->state_num  ; i++ )
-		 veteribi_log[i][0] = log(hmm->initial[i]) + log(hmm->observation[ ob2index(observation[0]) ][i]);
-	 //fill the initial prop to log
-	 for(i = 0; i < Seq_len-1 ; i++)
-	 {
-	 	 for(j = 0 ; j < hmm->state_num ; j++)
-		 {
-			 max_prop = -10000;
-			 prop = -10000;
-			 for(k = 0 ; k < hmm->state_num ; k++)
+	int t=0, j=0, i=0;
+	for(i=0 ; i<hmm->state_num ; i++)
+	{
+		_alpha[0][i] = hmm->initial[i] * hmm->observation[ ob2index(observation[0]) ][i];
+	}
+	for(t=1 ; t < Seq_len ; t++)
+	{
+		for(i=0 ; i<hmm->state_num ; i++)
+		{
+			 _alpha[t][i] = 0.;
+			 for(j=0 ; j<hmm->state_num ; j++)
 			 {
-				 prop = veteribi_log[k][i] + log(hmm->transition[k][j]);
-				 //Use log prop, preventing prop being too small.
-	 	 	 	 if(prop > max_prop)
-					 max_prop = prop;
+	 	 	 	 _alpha[t][i] += _alpha[t-1][j] * hmm->transition[j][i]; 
 			 }
-		 	 veteribi_log[j][ i+1 ] = max_prop + log( hmm->observation[ ob2index(observation[i+1]) ][j]);
+			 _alpha[t][i] *= hmm->observation[ ob2index(observation[t]) ][i];
+		}
+	}
+}
+void backward(char* observation)
+{
+	int i=0, j=0, t=0;
+	for(i=0 ; i<hmm->state_num ; i++)
+		_beta[Seq_len-1][i] = 1;
+	for(t=Seq_len-2 ; t>=0 ; t--)
+	{
+		for(i=0 ; i<hmm->state_num ; i++)
+		{
+			_beta[t][i] = 0.;
+			for(j=0 ; j<hmm->state_num ; j++)
+			{
+				_beta[t][i] += _beta[t+1][j] * hmm->observation[ ob2index(observation[t+1]) ][j] * hmm->transition[i][j];
+			}
+		}
+	}
+
+}
+void Getgamma(char* observation)
+{
+	 int i=0, t=0;
+	 double sum_alpha_beta = 0.;
+	 for(t=0 ; t<Seq_len ; t++)
+	 {
+		 sum_alpha_beta = 0.;
+		 for(i=0  ; i<hmm->state_num ; i++)
+	 	 {
+			 sum_alpha_beta += _alpha[t][i] * _beta[t][i];
+		 //printf("alpha: %lf, beta: %lf\n", _alpha[t][i], _beta[t][i]);
 		 }
-	 }
-}
-int findMax(double log[6][50], int col, int size)
-{
-	 int i=0, ind=-1;
-	 double max = -1000000000;
-	 for(i=0 ; i<size ; i++)
-	 {
-	 	 if(log[i][col] > max)
+		 _gamma[t][i] = 0;
+	 	 for(i=0 ; i<hmm->state_num ; i++)
 		 {
-			 max = log[i][col];
-		 	 ind = i;
-	 	 }
-	 }
-	 return ind;
-}
-int* backward(HMM* hmm, double veteribi_log[6][50])
-{
-	 int i=0, j=0, m=0, n=0;
-	 int* veteribi_ind = (int*)malloc(sizeof(int)* Seq_len );
-	 double max = -10000, prop = -10000, max_ind = -1;
-	 veteribi_ind[Seq_len-1] = findMax(veteribi_log, Seq_len-1, hmm->state_num);
-	 for(i=Seq_len-2 ; i>=0 ; i--)
-	 {
-		 max = -10000;
-		 prop = -10000;
-		 max_ind = -1;
-	 	 for(j=0 ; j<hmm->state_num ; j++)
-		 {
-			 prop = veteribi_log[j][i] + log(hmm->transition[j][ veteribi_ind[i+1] ]);
-		 	 if( prop > max )		
+	 	 	 _gamma[t][i] = ( _alpha[t][i] * _beta[t][i] ) / sum_alpha_beta ;
+			 if(t != Seq_len-1)
 			 {
-				 printf("max: %lf, prop: %lf, j: %d, i: %d\n", max, prop, j, i);
-				 max = prop;
-				 max_ind = j;
-		 	 }
+	 	 	 	 stat_gamma[i] += _gamma[t][i];
+			 }
+		 	 acc_gamma[t][i] += _gamma[t][i];
+	 	 	 ob_gamma[ ob2index(observation[t]) ][i] += _gamma[t][i];
+			 stat2_gamma[i] += _gamma[t][i];
 		 }
-		 veteribi_ind[i] = max_ind;
 	 }
-	 return veteribi_ind;
+
+}
+void Getepsilon(char* observation)
+{
+	int t=0, i=0., j=0;
+	double nor = 0.;
+	for(t=0 ; t<Seq_len-1 ; t++)
+	{
+		nor = 0.;
+		for(i=0 ; i<hmm->state_num ; i++)
+		{
+			 for(j=0 ; j<hmm->state_num ; j++)
+			 {
+	 	 	 	 nor += _alpha[t][i] * hmm->transition[i][j] * 
+					 hmm->observation[ ob2index(observation[t+1]) ][j] * _beta[t+1][j];
+			 }
+		}
+		for(i=0 ; i<hmm->state_num ; i++)
+		{
+			for(j=0 ; j<hmm->state_num ; j++)
+			{
+	 	 	 	 _epslion[t][i][j] = ( _alpha[t][i] * hmm->transition[i][j] * 
+					 hmm->observation[ ob2index(observation[t+1]) ][j] * _beta[t+1][j] ) / nor ;
+				 acc_epslion[i][j] += _epslion[t][i][j];
+			}
+		}
+	}
+}
+void UpdateHMM()
+{
+	 int i=0, j=0, k=0;
+	 for(i=0 ; i<hmm->state_num ; i++)
+	 {
+		 hmm->initial[i] = acc_gamma[0][i] / Sample_count;
+	 }
+	 for(i=0 ; i<hmm->state_num ; i++)
+	 {
+		 for(j=0 ; j<hmm->state_num ; j++)
+		 {
+			 hmm->transition[i][j] = acc_epslion[i][j] / stat_gamma[i];
+		 }
+	 }
+	 for(k=0 ; k<hmm->observ_num ; k++)
+	 {
+		 for(i=0 ; i<hmm->state_num ; i++)
+		 {
+			 hmm->observation[k][i] = ob_gamma[k][i] / stat2_gamma[i];
+		 }
+	 }
 }
 int main(int argc, char* argv[])
 {
@@ -85,30 +149,37 @@ int main(int argc, char* argv[])
 	 char* HMM_init_FileName = argv[2];
 	 char* Seq_model_FileName = argv[3];
 	 char* Output_model_FileName = argv[4];//params
-	 HMM* hmm = (HMM*)malloc(sizeof(HMM));//HMM model
-	 FILE* fptr = fopen(Seq_model_FileName, "r");//data file
+	 FILE* fin = fopen(Seq_model_FileName, "r");//data file
+	 FILE* fout = fopen(Output_model_FileName, "w");
 	 char observation[Seq_len] = "";//observation sequence
-	 int* veteribi_ind = (int*)malloc(sizeof(int));
-
+	 
+	 hmm = (HMM*)malloc(sizeof(HMM));//HMM model
+	 
 	 loadHMM(hmm, HMM_init_FileName);
-	 for(i=0 ; i<1 ; i++)
+	 bzero( _alpha, sizeof(_alpha));
+	 bzero( _beta, sizeof(_beta));
+	 bzero( _gamma, sizeof(_gamma));
+	 bzero( _epslion, sizeof(_epslion));
+	 bzero( acc_epslion, sizeof(acc_epslion));
+	 bzero( acc_gamma, sizeof(acc_gamma));
+	 bzero( stat_gamma, sizeof(stat_gamma));
+	 bzero( stat2_gamma, sizeof(stat2_gamma));
+	 bzero( ob_gamma, sizeof(ob_gamma));
+
+	 for(i=0 ; i<iteration ; i++)
 	 {
-	 	 load_observation(fptr, observation);
-	 	 forward(hmm, observation);
-	 	 veteribi_ind = backward(hmm, veteribi_log);
-	 	 for(i=0 ; i<Seq_len ; i++)
+	 	 for(j=0 ; j<Sample_count ; j++)
 	 	 {
-			 printf("%d: ", i);
-	 	     for(j=0 ; j<hmm->state_num ; j++)
-	 	 	 	 printf("%f ", veteribi_log[j][i]);			 
-	 	     printf("\n");
+	 	 	 load_observation(fin, observation);
+	 	     forward(observation);
+	 	     backward(observation);
+	 	     Getgamma(observation);
+	 	     Getepsilon(observation);
 	 	 }
-	 	 for(j=0 ; j<Seq_len ; j++)
-	 	 {
-	 	     printf("%d ", veteribi_ind[j]);
-	 	 }
-		 printf("\n");
+		 fseek(fin, 0, SEEK_SET);
+	 	 UpdateHMM(); 
 	 }
+	 DumpModel(fout);
 	 return 0;	 
 }
 
