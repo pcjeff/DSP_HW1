@@ -102,8 +102,7 @@ int main(int argc, char* argv[])
 				 max_ind = j;
 			 }
 		 }
-		 fprintf(fout, "model_0%d.txt\n", max_ind+1, max_prop);
+		 fprintf(fout, "model_0%d.txt %E\n", max_ind+1, max_prop);
 	 }
-	 //printf("prop: %E\n", prop);
 	 return 0;
 }
