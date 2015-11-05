@@ -1,9 +1,9 @@
 .PHONY: all clean
 
-CFLAGS+=-g
+CFLAGS+=-g -O3
 LDFLAGS+=-lm     # link to math library
 
-TARGET=train
+TARGET=train test ATP_train
 
 all: $(TARGET)
 # type make/make all to compile test_hmm

@@ -160,14 +160,14 @@ int main(int argc, char* argv[])
 	 bzero( _beta, sizeof(_beta));
 	 bzero( _gamma, sizeof(_gamma));
 	 bzero( _epslion, sizeof(_epslion));
-	 bzero( acc_epslion, sizeof(acc_epslion));
-	 bzero( acc_gamma, sizeof(acc_gamma));
-	 bzero( stat_gamma, sizeof(stat_gamma));
-	 bzero( stat2_gamma, sizeof(stat2_gamma));
-	 bzero( ob_gamma, sizeof(ob_gamma));
 
 	 for(i=0 ; i<iteration ; i++)
 	 {
+	 	 bzero( acc_epslion, sizeof(acc_epslion));
+	 	 bzero( acc_gamma, sizeof(acc_gamma));
+		 bzero( stat_gamma, sizeof(stat_gamma));
+	 	 bzero( stat2_gamma, sizeof(stat2_gamma));
+	 	 bzero( ob_gamma, sizeof(ob_gamma));
 	 	 for(j=0 ; j<Sample_count ; j++)
 	 	 {
 	 	 	 load_observation(fin, observation);
@@ -176,8 +176,8 @@ int main(int argc, char* argv[])
 	 	     Getgamma(observation);
 	 	     Getepsilon(observation);
 	 	 }
-		 fseek(fin, 0, SEEK_SET);
 	 	 UpdateHMM(); 
+		 fseek(fin, 0, SEEK_SET);
 	 }
 	 DumpModel(fout);
 	 return 0;	 
