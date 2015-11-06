@@ -1,8 +1,8 @@
-
+import sys
 predict = []
 answers = []
 
-with open('result1.txt', 'r') as result_f, open('../testing_answer.txt', 'r') as answer_f:
+with open(sys.argv[1], 'r') as result_f, open(sys.argv[2], 'r') as answer_f:
     for line in result_f:
         predict.append(line.strip().split()[0])
     for line in answer_f:
